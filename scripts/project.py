@@ -34,10 +34,33 @@ from pathlib import Path
 from urllib.parse import quote
 
 
-PATHS_FILE = Path(os.environ.get(
-    "SKIFF_PATHS_MD",
-    str(Path.home() / "Skiff/06. System/paths.md"),
-))
+def _discover_paths_file() -> Path:
+    env = os.environ.get("SKIFF_PATHS_MD")
+    if env:
+        return Path(os.path.expanduser(env))
+
+    candidates: list[Path] = []
+    script_dir = Path(__file__).resolve().parent
+    candidates.extend([script_dir, *script_dir.parents])
+    cwd = Path.cwd().resolve()
+    candidates.extend([cwd, *cwd.parents])
+
+    seen: set[Path] = set()
+    for base in candidates:
+        if base in seen:
+            continue
+        seen.add(base)
+        probe = base / "06. System" / "paths.md"
+        if probe.exists():
+            return probe
+
+    sys.exit(
+        "error: could not find 06. System/paths.md. "
+        "Set SKIFF_PATHS_MD to an explicit file path."
+    )
+
+
+PATHS_FILE = _discover_paths_file()
 
 
 def resolve(anchor: str) -> str:
@@ -170,7 +193,16 @@ def add_related(text: str, link_stems: list[str]) -> str:
 
 
 def load_template(name: str) -> str:
-    return (vault_path("TEMPLATES_DIR") / f"{name}.md").read_text()
+    primary = vault_path("TEMPLATES_DIR") / f"{name}.md"
+    if primary.exists():
+        return primary.read_text()
+    fallback = Path(__file__).resolve().parents[1] / "templates" / f"{name}.md"
+    if fallback.exists():
+        return fallback.read_text()
+    sys.exit(
+        f"error: template '{name}.md' not found in "
+        f"{vault_path('TEMPLATES_DIR')} or {fallback.parent}"
+    )
 
 
 def list_projects() -> list[Path]:
